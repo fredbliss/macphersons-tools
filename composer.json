@@ -1,0 +1,43 @@
+{
+    "name": "intelligentspark/macphersons_tools",
+    "description": "A collection of import & export tools for Macphersons Art",
+    "type": "contao-module",
+    "keywords": [
+        "contao",
+        "backend",
+        "member",
+        "import"
+    ],
+    "require": {
+        "ddeboer/data-import": "@stable",
+        "contao/core": ">=3.3.0,<4.0.0-dev",
+        "contao-community-alliance/composer-plugin": "*",
+        "terminal42/contao-namespace-class-loader": "~1.0"
+    },
+    "license": "proprietary",
+    "authors": [
+        {
+            "name": "intelligentspark",
+            "email": "fred.bliss@intelligentspark.com"
+        }
+    ],
+    "autoload": {
+        "psr-0": {
+            "IntelligentSpark\\": [
+                "system/modules/isotope-import/library/"
+            ]
+        }
+    },
+    "extra": {
+        "contao": {
+            "sources": {
+                "": "system/modules/isotope-import"
+            }
+        }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true,
+    "config": {
+        "preferred-install": "dist"
+    }
+}

@@ -1,0 +1,43 @@
+<div class="promo_product prod_<?php echo $this->productAlias; ?><?php echo (!$this->featured ? " nofeature" : " feature" ); ?>">
+	<?php if(trim($this->imageUrl != "")): ?>
+		<img class="product_image" src="<?php echo $this->imageUrl; ?>" />
+	<?php endif; ?>
+	<?php if(trim($this->productTitle != "")): ?>
+		<h3 class="product_title"><?php echo $this->productTitle; ?></h3>
+	<?php endif; ?>
+	<?php if(trim($this->description != "")): ?>
+		<p class="description"> <?php echo $this->description; ?> </p>
+	<?php endif; ?>
+	<?php if(trim($this->dimensions != "")): ?>
+		<p class="dimensions"><strong>Dimensions:</strong><?php echo $this->dimensions; ?></p>
+	<?php endif; ?>
+	<?php if(trim($this->itemLink != "")): ?>
+		<p class="item_number"><a class="item_link" href="<?php echo str_replace("&" ,"&amp;" ,$this->itemLink); ?>" target="_blank">View in Catalog</a></p>
+	<?php endif; ?>
+
+	<?php if(count($this->featuresAndBenefits)): ?>
+	<h3 class="features_and_benefits">Features &amp; Benefits</h3>
+	<ul class="feature_benefits">
+        <?php foreach($this->featuresAndBenefits as $i=>$feature): ?>
+        <li class="feature_benefit feature_benefit_<?php echo $i; ?>"><?php echo $feature; ?></li>
+        <?php endforeach; ?>
+	</ul>
+    <?php endif; ?>
+	
+	<h3 class="program_details">Program Details</h3>
+	<?php if(trim($this->workshopDeal != "")): ?>
+		<p class="workshop_deal"><strong>Workshop Deal:</strong> <?php echo $this->workshopDeal; ?></p>
+	<?php endif; ?>
+	<?php if(trim($this->ecCompare != "")): ?>
+		<p class="compare_to_ec"><strong>Compare to EC+:</strong> <?php echo $this->ecCompare; ?></p>
+	<?php endif; ?>
+	<?php if(trim($this->terms != "")): ?>
+		<p class="term"><strong>Terms:</strong> <?php echo $this->terms; ?></p>
+	<?php endif; ?>
+	<?php if(trim($this->dealDetail != "")): ?>
+		<p class="deal_detail"><strong>Deal Detail:</strong> <?php echo $this->dealDetail; ?></p>
+	<?php endif; ?>
+	<?php if(trim($this->availability != "")): ?>
+		<p class="availability"><strong>Availability:</strong> <?php echo $this->availability; ?></p>
+	<?php endif; ?>
+</div>

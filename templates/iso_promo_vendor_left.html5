@@ -1,0 +1,9 @@
+<div class="promo_vendor promo_vendor_<?php echo $this->promoAlias; ?>">
+	<?php if(trim($this->vendorImage != "")): ?>
+	<div class="image_container">
+        <a href="<?php echo $this->parentPage; ?>"><img class="vendor_logo" src="<?php echo $this->vendorImage; ?>" alt="<?php echo $this->vendorName; ?>" /></a>
+    </div>
+    <?php else: ?>
+    <h3><?php echo $this->vendorName; ?></h3>
+    <?php endif; ?>
+</div>

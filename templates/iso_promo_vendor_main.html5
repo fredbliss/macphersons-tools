@@ -1,0 +1,25 @@
+<div class="promo_vendor promo_vendor_<?php echo $this->promoAlias; ?>">
+	<?php if($this->vendorDetails != ""): ?>
+	    <div class="vendor_details"><strong>VENDOR DETAILS:</strong> <?php echo $this->vendorDetails; ?></div>
+    <?php endif; ?>
+    <?php if($this->vendorDropshipMinimum != ""): ?>
+        <div class="vendor_dropship_minimum"><strong>DROP SHIP MINIMUM:</strong> <?php echo $this->vendorDropshipMinimum; ?></div>
+    <?php endif; ?>
+    <?php if($this->vendorFreightPolicy != ""): ?>
+        <div class="vendor_freight_policy"><strong>FREIGHT POLICY:</strong> <?php echo $this->vendorFreightPolicy; ?></div>
+    <?php endif; ?>
+    <?php if($this->hasSpecialOffer): ?>
+        <div class="vendor_special_offer">
+        <p><strong>SPECIAL OFFERS:</strong> In addition to these Super Drop Ship deals, place an order from your closest MacPherson's Warehouse for immediate shipment of <strong>$<?php echo $this->vendorDcMin; ?></strong> net or higher and receive an Extra <strong><?php echo $this->vendorDcOffer; ?>%</strong>!!!
+            <ul>
+                <li>Place a single vendor order on OEX - no back orders</li>
+                <li>Add <strong>DWE</strong> to both flyer code box <strong>AND</strong> special instructions</li>
+                <li>Available to <strong>ATTENDEES ONLY</strong> through 6/26/15</li>
+                <li>Discount given as a trailing credit</li>
+                <li>Orders will be shipped with the next freight-allowed order</li>
+                <li>Limit one order per vendor</li>
+            </ul>
+        </p>
+        </div>
+    <?php endif; ?>
+</div>

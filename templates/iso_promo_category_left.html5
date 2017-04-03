@@ -1,0 +1,16 @@
+<section class="ce_accordionStart ce_accordion block">
+    <div class="toggler">Vendor Deal Info</div>
+    <div class="accordion">
+        <div>
+            <div class="ce_text block">
+                  <p><strong>Details:</strong> <?php echo $this->vendorDetails; ?></p>
+            </div>
+            <div class="ce_text block">
+                <p><strong>Order Minimum:</strong> <?php echo $this->orderMinimum; ?></p>
+            </div>
+            <div class="ce_text block">
+                <p><strong>Freight Policy:</strong> <?php echo $this->freightPolicy; ?></p>
+            </div>
+        </div>
+    </div>
+</section>

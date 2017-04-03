@@ -1,0 +1,8 @@
+<div class="promo_header promo_<?php echo $this->promoAlias; ?>">
+	<?php if(trim($this->promoTitle != "")): ?>
+		<h1 class="promo_title"><?php echo $this->promoTitle; ?></h1>
+	<?php endif; ?>
+	<?php if(trim($this->promoSubtitle != "")): ?>
+		<h2 class="promo_subtitle"><?php echo $this->promoSubtitle; ?></h2>
+	<?php endif; ?>
+</div>

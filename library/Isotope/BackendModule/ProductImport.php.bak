@@ -1,0 +1,654 @@
+<?php
+
+/**
+ * Isotope eCommerce for Contao Open Source CMS
+ *
+ * Copyright (C) 2009-2014 terminal42 gmbh & Isotope eCommerce Workgroup
+ *
+ * @package    Isotope
+ * @link       http://isotopeecommerce.org
+ * @license    http://opensource.org/licenses/lgpl-3.0.html
+ */
+
+namespace Isotope\BackendModule;
+
+require_once TL_ROOT.'/composer/vendor/autoload.php';
+
+use Isotope\Isotope;
+use Isotope\Model\ProductPrice;
+use Isotope\Model\Attribute;
+use Isotope\Backend\Product\Price;
+use Ddeboer\DataImport\Workflow;
+use Ddeboer\DataImport\Reader;
+use Ddeboer\DataImport\Writer;
+use Ddeboer\DataImport\Filter;
+use Ddeboer\DataImport\Reader\ArrayReader;
+use Ddeboer\DataImport\ValueConverter\CallbackValueConverter;
+use Ddeboer\DataImport\ItemConverter\CallbackItemConverter;
+use Ddeboer\DataImport\ItemConverter\MappingItemConverter;
+use Ddeboer\DataImport\Reader\CsvReader;
+use Ddeboer\DataImport\Writer\CallbackWriter;
+use Ddeboer\DataImport\Writer\DoctrineWriter;			
+/**
+ * Class ModuleIsotopeSetup
+ *
+ * Back end module Isotope "setup".
+ * @copyright  Isotope eCommerce Workgroup 2009-2012
+ * @author     Andreas Schempp <andreas.schempp@terminal42.ch>
+ * @author     Fred Bliss <fred.bliss@intelligentspark.com>
+ */
+class ProductImport extends \BackendModule
+{
+	/**
+	 * Template
+	 * @var string
+	 */
+	protected $strTemplate = 'iso_product_import';
+
+	public $vendors = array();
+	
+	/**
+     * Generate the module
+     * @return string
+     */
+    public function generate()
+    {		
+        return parent::generate();
+	}
+	
+  	public function compile()
+	{
+		$this->loadLanguageFile('default');
+		$this->import('BackendUser', 'User');
+		$class = $this->User->uploader;
+		
+		// See #4086
+		if (!class_exists($class))
+		{
+			$class = 'FileUpload';
+		}
+
+		$objUploader = new $class();
+
+		if (\Input::post('FORM_SUBMIT') == 'iso_product_import')
+		{
+			#if (!\Input::post('confirm'))
+			#{
+				$arrUploaded = $objUploader->uploadTo('system/tmp');
+
+				if (empty($arrUploaded))
+				{
+					\Message::addError($GLOBALS['TL_LANG']['ERR']['all_fields']);
+					$this->reload();
+				}
+
+				$arrFiles = array();
+
+				foreach ($arrUploaded as $strFile)
+				{
+					// Skip folders
+					if (is_dir(TL_ROOT . '/' . $strFile))
+					{
+						\Message::addError(sprintf($GLOBALS['TL_LANG']['ERR']['importFolder'], basename($strFile)));
+						continue;
+					}
+
+					#$objFile = new \File($strFile, true);
+
+					$arrFiles[] = $strFile;
+				}
+			#}
+			#else
+			#{
+			#	$arrFiles = explode(',', $this->Session->get('uploaded_files'));
+			#}
+
+			// Check whether there are any files
+			if (empty($arrFiles))
+			{
+				\Message::addError($GLOBALS['TL_LANG']['ERR']['all_fields']);
+				$this->reload();
+			}
+
+			// Proceed
+			#if (\Input::post('confirm') == 1)
+			#{
+			switch(\Input::post('import_type'))
+			{
+				case 'products':
+					$this->importProducts($arrFiles);
+					break;
+				case 'vendors':
+					$this->importVendors($arrFiles);
+					break;
+				case 'promos':
+					$this->importPromos($arrFiles);
+					break;
+			}
+			#}
+			
+		}
+		
+		$arrImportTypes['products'] 	= 'Product';
+		$arrImportTypes['vendors']		= 'Vendors';
+		$arrImportTypes['promos']		= 'Promos';
+	
+		$this->Template->importTypes = $arrImportTypes;
+		$this->Template->action = ampersand(\Environment::get('request'));
+		$this->Template->messages = \Message::generate();
+		$this->Template->href = $this->getReferer(true);
+		$this->Template->title = specialchars($GLOBALS['TL_LANG']['MSC']['backBTTitle']);
+		$this->Template->button = $GLOBALS['TL_LANG']['MSC']['backBT'];
+		$this->Template->headline = $GLOBALS['TL_LANG']['MSC']['importTitle'];
+		$this->Template->uploader =  '<h3>File Source</h3>'.$objUploader->generateMarkup();
+		$this->Template->submitButton = specialchars($GLOBALS['TL_LANG']['MSC']['continue']);
+		$this->Template->overwriteLabel = $GLOBALS['TL_LANG']['MSC']['overwriteData'];
+		$this->Template->importTypeLabel = $GLOBALS['TL_LANG']['MSC']['importType'];
+		$this->Template->import = $GLOBALS['TL_LANG']['MSC']['import'];
+		$this->Template->maxfilesize = $GLOBALS['TL_CONFIG']['maxFileSize'];
+ 		
+	}	
+	
+	protected function importProducts($arrFiles)
+	{	
+		$obj = $this;
+		
+		// Store the field names of the theme tables
+		$arrDbFields = array
+		(
+			'tl_iso_product'       => $this->Database->getFieldNames('tl_iso_product'),
+		);
+						
+		if(\Input::post('overwrite_data')=='1')
+		{								
+			\Database::getInstance()->executeUncached("TRUNCATE tl_iso_product");	
+			\Database::getInstance()->executeUncached("TRUNCATE tl_iso_product_pricetier");	
+			\Database::getInstance()->executeUncached("TRUNCATE tl_iso_product_price");			
+		}	
+		
+		$this->loadVendors();
+		
+		// As you can see, the first names are not capitalized correctly. Let's fix
+		// that with a value converter:
+		$converterCurrency = new CallbackValueConverter(function ($input) {
+			preg_match_all("/([0-9\.]+)/",str_replace(',','',$input),$arrMatches);
+			return (float)$arrMatches[0][0];
+		});		
+		
+		$converterFloat = new CallbackValueConverter(function ($input) {
+			return (float)$input;	
+		});
+		
+		$converterInt = new CallbackValueConverter(function ($input) {
+			return (integer)$input;	
+		});
+		
+		$converterAlias = new CallbackValueConverter(function ($input) {
+			return standardize($input);
+		});
+		
+		$converterVendor = new CallbackValueConverter(function ($input) use ($obj) {
+			
+			return $obj->vendors[$input];
+		});
+		
+		$writerCallback = new CallbackWriter(function ($row) {
+			var_dump($row); exit;
+		});
+		
+		$converterRequiredFields = new CallbackItemConverter(function ($item) use ($obj) {
+				$item['alias'] = $obj->generateAlias($item['product_title'],$item['item_number']);
+				$item['type'] = 2;
+				$item['tstamp'] = time();
+				$item['dateAdded'] = time();
+				$item['published'] = '1';
+				$item['shipping_weight'] = array(0,'kg');
+				$item['product_line'] = $item['product_title'];
+				//create the hash key
+				$strPromo = standardize(\String::restoreBasicEntities($item['promo_title']));
+				
+				$strProductLine = standardize(\String::restoreBasicEntities($item['product_line']));
+				
+				$item['category_hash_key'] = $strPromo.'-'.$strProductLine;
+				
+				return $item;
+			});
+			
+		$converterMapping = new MappingItemConverter();
+		
+		$converterMapping->addMapping('product_title','name');	
+		$converterMapping->addMapping('promo_title','promo');	
+		$converterMapping->addMapping('item_number','sku');
+		$converterMapping->addMapping('id','vendor');
+		$converterMapping->addMapping('dws_net','baseprice');
+						
+		$writerProducts = new CallbackWriter(function($row) use ($obj) {
+								
+			try {				
+				$intId = \Database::getInstance()->prepare("INSERT INTO tl_iso_product %s")->set($row)->executeUncached()->insertId;
+				
+				$obj->savePrice($intId,$row['baseprice']);
+			}
+			catch(\Exception $e)
+			{
+				echo $e->getMessage(); exit;	
+			}
+		});
+		
+		foreach($arrFiles as $file)
+		{
+		
+			$objFile = new \SplFileObject(TL_ROOT . '/' . $file);
+	
+			$reader = new CsvReader($objFile, ",");
+		
+			$reader->setHeaderRowNumber(0);
+				
+			$workflow = new Workflow($reader);
+						
+			//need a write but how
+			$workflow
+				->addValueConverter('msrp', $converterCurrency)
+				->addValueConverter('baseprice', $converterCurrency)
+				->addValueConverter('discount', $converterFloat)
+				->addValueConverter('min_qty', $converterInt)
+				->addValueConverter('ec_compare', $converterFloat)
+				->addValueConverter('product_title', $converterAlias)
+				->addValueConverter('vendor',$converterVendor)
+				->addItemConverter($converterRequiredFields)
+				->addItemConverter($converterMapping)
+				#->addWriter($writerCallback)
+				->addWriter($writerProducts)
+				->process();
+		}
+		
+	}
+	
+	public function hashKey($strValue)
+	{
+		return md5($strValue);	
+	}
+	
+	public function generateAlias($strValue,$strAppend=false)
+	{		
+		$strAlias = standardize(\String::restoreBasicEntities($strValue));
+			
+		$objAlias = \Database::getInstance()->prepare("SELECT MAX(id) FROM tl_iso_product WHERE alias=?")
+								   ->execute($strAlias);
+
+		// Check whether the product alias exists
+		if ($objAlias->numRows)
+		{
+			$strAlias .= '-' . ($strAppend!==false ? standardize(\String::restoreBasicEntities($strAppend)) : $objAlias->id+1);	
+		}
+
+		return $strAlias;
+	}
+	
+	
+	public function savePrice($intProductId,$fltPrice)
+	{
+		$time = time();
+
+        // Parse the timePeriod widget
+       
+        $strPrice = (string) $fltPrice;
+       	$intTax = 0;
+		
+		$intPrice = \Database::getInstance()->prepare("
+			INSERT INTO " . ProductPrice::getTable() . " (pid,tstamp,tax_class) VALUES (?,?,?)
+		")->execute($intProductId, $time, $intTax)->insertId;
+		
+		\Database::getInstance()->prepare("
+			INSERT INTO tl_iso_product_pricetier (pid,tstamp,min,price) VALUES (?,?,1,?)
+		")->executeUncached($intPrice, $time, $strPrice);
+
+	}
+	
+	protected function loadVendors()
+	{
+		$objResult = \Database::getInstance()->query("SELECT id,vendor_id FROM tl_vendor");	
+		
+		if($objResult->numRows) {
+			while($objResult->next())
+			{
+				$arrVendors[$objResult->vendor_id] = (int)$objResult->id;
+			}
+			
+			$this->vendors = $arrVendors;
+		}
+		
+	}
+	
+	public function convertVendorId($id)
+	{
+			return $this->vendors[$id];
+	}
+	
+	protected function importVendors($arrFiles)
+	{	
+		#var_dump($arrFiles);
+		// Store the field names of the theme tables
+		$arrDbFields = array
+		(
+			'tl_vendor'       => $this->Database->getFieldNames('tl_vendor'),
+		);
+		
+		if(\Input::post('overwrite_data')=='1')
+		{								
+			\Database::getInstance()->executeUncached("TRUNCATE tl_vendor");			
+		}	
+		
+		foreach($arrFiles as $file)
+		{
+		
+			$objFile = new \SplFileObject(TL_ROOT . '/' . $file);
+	
+			$reader = new CsvReader($objFile, ",");
+		
+			$reader->setHeaderRowNumber(0);
+				
+			$workflow = new Workflow($reader);
+						
+			$converterInt = new CallbackValueConverter(function ($input) {
+				return (integer)$input;	
+			});
+			
+			$converterAlias = new CallbackValueConverter(function ($input) {
+				return standardize($input);
+			});
+						
+			$converterRequiredFields = new CallbackItemConverter(function ($item) {
+				$item['tstamp'] = time();
+								
+				return $item;
+			});
+			
+			$converterMapping = new MappingItemConverter();
+			
+			$converterMapping->addMapping('id','vendor_id');
+			
+			$writerProducts = new CallbackWriter(function($row) use ($storage) {
+				try {
+					\Database::getInstance()->prepare("INSERT INTO tl_vendor %s")->set($row)->executeUncached();
+				}
+				catch(\Exception $e)
+				{
+						
+				}
+			});
+			
+			//need a write but how
+			$workflow				
+				->addItemConverter($converterRequiredFields)
+				->addItemConverter($converterMapping)
+				->addWriter($writerProducts)
+				->process();
+		}
+		
+	}
+	
+	protected function importPromos($arrFiles)
+	{	
+		foreach($arrFiles as $file)
+		{
+			// Base serialized arrays. We serialize these and add to a few insert statements.
+			// These don't control anything.
+			$arrHeadline = array("unit" => "h1", "value" => "");
+			$arrChMod = array('u1', 'u2', 'u3', 'u4', 'u5', 'u6', 'g4', 'g5', 'g6');
+		
+			// Read File
+			$objFile = new \SplFileObject(TL_ROOT . '/' . $file);
+			$reader = new CsvReader($objFile, ",");
+			$reader->setHeaderRowNumber(0);
+
+			// Build Workflow and Processing Functions
+			$workflow = new Workflow($reader);
+
+			$converterMapping = new MappingItemConverter();
+			
+			$converterMapping->addMapping('id','vendor_id');
+			$converterMapping->addMapping('name','vendor_name');
+			$converterMapping->addMapping('subtitle','promo_subtitle');	
+			$converterMapping->addMapping('catalog_copy','description');
+			$converterMapping->addMapping('rack_dimensions','dimensions');
+			$converterMapping->addMapping('catalog_link','item_link');
+			$converterMapping->addMapping('deal_note','deal_detail');
+			$converterMapping->addMapping('availability_date','availability');
+
+			$converterPercent = new CallbackValueConverter(function ($input) {
+				$output = (float)$input * 100;
+				$output = number_format($output, 0);
+				return $output;	
+			});
+				
+			$converterFloat = new CallbackValueConverter(function ($input) {
+				return (float)$input;	
+			});
+			
+			$converterInt = new CallbackValueConverter(function ($input) {
+				return (integer)$input;	
+			});
+			
+			$converterAlias = new CallbackValueConverter(function ($input) {
+				return standardize($input);
+			});
+			
+			$converterPromoAlias = new CallbackItemConverter(function ($item) {
+				$item['alias'] = standardize("promo-" .$item['vendor_id'] ."-" .$item['promo_title']);			
+				return $item;
+			});
+
+			$converterProductAlias = new CallbackItemConverter(function ($item) {
+				$item['product_alias'] = standardize($item['alias'] ."-" .$item['product_title']);
+				$item['category_hash_key'] = $item['product_alias'];
+				return $item;
+			});
+			
+			$converterPageName = new CallbackItemConverter(function ($item) {
+				$item['page_name'] = $item["vendor_name"] ." - " .$item["promo_title"];
+				return $item;
+			});
+
+			$converterVendorAlias = new CallbackItemConverter(function ($item) {
+				$item['vendor_alias'] = standardize($item["vendor_name"]);
+				return $item;
+			});
+
+			$converterItemNumber = new CallbackItemConverter(function ($item) {
+				$query = parse_url($item["item_link"], PHP_URL_QUERY);
+				$arrQuery = parse_str($query);
+				$itemNumber = $arrQuery["product"];
+				$item['item_number'] = $itemNumber;			
+				return $item;
+			});
+
+			$converterParseTemplates = new CallbackItemConverter(function ($item) {
+				$template = new \FrontendTemplate('iso_promo_header');
+				$template->promoAlias = $item['alias'];
+				$template->promoTitle = $item['promo_title'];
+				$template->promoSubtitle = $item['promo_subtitle'];
+				$item["promo_header_html"] = $template->parse();
+
+				$template = new \FrontendTemplate('iso_promo_category');
+				$template->imageUrl = $item['image_path'];
+				$template->productAlias = $item['product_alias'];
+				$template->productTitle = $item['product_title'];
+				$template->description = $item['description'];
+				$template->dimensions = $item['dimensions'];
+				$template->itemLink = $item['item_link'];
+				$template->itemNumber = $item['item_number'];
+				$template->workshopDeal = $item['workshop_deal'];
+				$template->ecCompare = $item['ec_compare'];
+				$template->terms = $item['terms'];
+				$template->dealDetail = $item['deal_detail'];
+				$template->availability = $item['availability'];
+				$template->featureBenefit1 = $item['feature_benefit_1'];
+				$template->featureBenefit2 = $item['feature_benefit_2'];
+				$template->featureBenefit3 = $item['feature_benefit_3'];
+				$template->featureBenefit4 = $item['feature_benefit_4'];
+				$item["promo_category_html"] = $template->parse();
+				return $item;
+			});
+			
+			$writerPromos = new CallbackWriter(function($row) use ($storage) {
+				try {
+
+					// Lookup Parent Page
+					$objVendorPage = \Database::getInstance()->prepare("SELECT id FROM tl_page WHERE vendor=? AND pid=5 AND alias LIKE ?")
+											   ->execute($row['vendor_id'], $row['vendor_alias']);
+//if ($row["vendor_name"] == "") {die(print_r($row, TRUE));}
+					if ($objVendorPage->numRows)
+					{
+						$intVendorPageId = (int)$objVendorPage->id;
+					} else {
+						$intVendorPageId = \Database::getInstance()->prepare("INSERT INTO tl_page (
+									pid,
+									sorting, 
+									tstamp, 
+									title, 
+									alias, 
+									type, 
+									pageTitle, 
+									robots, 
+									redirect, 
+									chmod, 
+									sitemap, 
+									published,
+									vendor
+								) VALUES (5, 64, ?, ?, ?, 'regular', ?, 'noindex,nofollow', 'permanent', ?, 'map_default', 1, ?)")
+										->execute(time(), $row["vendor_name"], $row["vendor_alias"], $row["vendor_name"], serialize($arrChMod), $row["vendor_id"])->insertId;
+					}
+
+					// Lookup Promo Page
+					$objPage = \Database::getInstance()->prepare("SELECT id FROM tl_page WHERE vendor=? AND alias=? and pid=?")
+											   ->execute($row['vendor_id'], $row['alias'], $intVendorPageId);
+
+					// Check whether the page exists
+					if ($objPage->numRows)
+					{
+						$intPageId = (int)$objPage->id;
+						// Page exists. Check to see if there is a content element for the header already. If different, drop it and store new version.
+						$objHeader = \Database::getInstance()->prepare("SELECT id FROM tl_content WHERE category_hash_key=? AND text LIKE ?")
+										   ->execute($row['alias'], $row['promo_header_html']);
+
+							// Lookup Article ID
+						$objArticle = \Database::getInstance()->prepare("SELECT id FROM tl_article WHERE pid LIKE ?")
+										   ->execute($intPageId);
+						$intArticleId = (int)$objArticle->id;	  
+
+						// Header doesn't exist or is different.
+						if (!$objHeader->numRows)
+						{
+							// Delete old content element
+							// Ideally we would version the old one, but that's on the To-Do
+							\Database::getInstance()->prepare("DELETE FROM tl_content WHERE pid=? AND category_hash_key=?")
+											->execute($intArticleId, $row['alias']);
+
+							// Insert new content element					
+							\Database::getInstance()->prepare("INSERT INTO tl_content (pid,ptable,tstamp,type,headline,text,category_hash_key) VALUES (?, 'tl_article', ?, 'text', ?, ?, ?)")
+											->execute($intArticleId, time(), serialize($arrHeadline), $row['promo_header_html'], $row['alias']);												
+						}
+						
+						
+						
+						// Check if Product Content element exists or has changed.
+						$objContent = \Database::getInstance()->prepare("SELECT id FROM tl_content WHERE category_hash_key=? AND text LIKE ?")
+											   ->execute($row['category_hash_key'], $row['promo_header_html']);
+
+						// Product Content doesn't exist or is different.						
+						if (!$objContent->numRows)
+						{	
+							// Delete old content element
+							// Ideally we would version the old one, but that's on the To-Do
+							\Database::getInstance()->prepare("DELETE FROM tl_content WHERE pid=? AND category_hash_key=?")
+											->execute($intArticleId, $row['category_hash_key']);
+
+							// Insert new content element					
+							\Database::getInstance()->prepare("INSERT INTO tl_content (pid,ptable,tstamp,type,headline,text,category_hash_key) VALUES (?, 'tl_article', ?, 'text', ?, ?, ?)")
+											->execute($intArticleId, time(), serialize($arrHeadline), $row['promo_category_html'], $row['category_hash_key']);												
+						}
+						
+						// Add Isotope Item Element if doesn't exist. Else update 
+								   
+					} else {
+							
+						// Create Page
+						$intPageId = \Database::getInstance()->prepare("INSERT INTO tl_page (
+									pid,
+									sorting, 
+									tstamp, 
+									title, 
+									alias, 
+									type, 
+									pageTitle, 
+									robots, 
+									redirect, 
+									chmod, 
+									sitemap, 
+									published,
+									isPromo, 
+									vendor
+								) VALUES (?, 128, ?, ?, ?, 'regular', ?, 'noindex,nofollow', 'permanent', ?, 'map_default', 1, 1, ?)")
+										->execute($intVendorPageId, time(), $row["page_name"], $row["alias"], $row["page_name"], serialize($arrChMod), $row["vendor_id"])->insertId;
+				
+						// Create Article in New Page
+						$intArticleId = \Database::getInstance()->prepare("INSERT INTO tl_article (
+									pid,
+									sorting, 
+									tstamp, 
+									title, 
+									alias, 
+									author,
+									inColumn,
+									published
+								) VALUES ( ?, 256, ?, ?, ?, 2, 'main', 1)")
+										->execute($intPageId, time(), $row["promo_title"], $row["alias"])->insertId;
+						
+						// Add Header Content Element
+						\Database::getInstance()->prepare("INSERT INTO tl_content (pid,ptable,tstamp,type,headline,text,category_hash_key) VALUES (?, 'tl_article', ?, 'text', ?, ?, ?)")
+										->execute($intArticleId, time(), serialize($arrHeadline), $row['promo_header_html'], $row['alias']);
+										
+						// Add Product Category Element
+						\Database::getInstance()->prepare("INSERT INTO tl_content (pid,ptable,tstamp,type,headline,text,category_hash_key) VALUES (?, 'tl_article', ?, 'text', ?, ?, ?)")
+										->execute($intArticleId, time(), serialize($arrHeadline), $row['promo_category_html'], $row['category_hash_key']);				
+
+						// Add Isotope Item Element
+
+					}
+	
+					
+				}
+				catch(\Exception $e)
+				{
+						echo 'Caught exception: ',  $e->getMessage(), "\n";
+				}
+			});
+
+			$workflow
+				->addValueConverter('ec_compare', $converterPercent)
+				->addValueConverter('id', $converterInt)
+				->addValueConverter('id', $converterInt)
+				->addItemConverter($converterPromoAlias)
+				->addItemConverter($converterProductAlias)
+				->addItemConverter($converterItemNumber)
+				->addItemConverter($converterMapping)
+				->addItemConverter($converterPageName)
+				->addItemConverter($converterVendorAlias)
+				->addItemConverter($converterParseTemplates)
+				->addWriter($writerPromos)
+				->process();
+		}
+
+	}		
+	
+		
+    /**
+     * {@inheritdoc}
+     */
+    protected function checkUserAccess($module)
+    {
+        return \BackendUser::getInstance()->isAdmin || \BackendUser::getInstance()->hasAccess($module, 'iso_modules');
+    }
+
+}

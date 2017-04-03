@@ -1,0 +1,38 @@
+<div id="tl_buttons">
+  <a href="<?php echo $this->href; ?>" class="header_back" title="<?php echo $this->title; ?>"><?php echo $this->button; ?></a>
+</div>
+
+<div id="tl_extension">
+  <h2 class="sub_headline"><?php echo $this->headline; ?></h2>
+  <?php echo $this->messages; ?>
+  <form action="<?php echo $this->action; ?>" class="tl_form" method="post" enctype="multipart/form-data">
+    <div class="tl_formbody_edit">
+      <input type="hidden" name="FORM_SUBMIT" value="iso_product_import">
+      <input type="hidden" name="REQUEST_TOKEN" value="<?php echo REQUEST_TOKEN; ?>">
+      <input type="hidden" name="MAX_FILE_SIZE" value="<?php echo $this->maxfilesize; ?>">
+          <div class="tl_tbox">
+            <div>
+              <h3><?php echo $this->importTypeLabel; ?></h3>
+              <select name="import_type" id="ctrl_import_type" class="tl_select">
+              <?php foreach($this->importTypes as $k=>$v): ?>
+              <option value="<?php echo $k; ?>"><?php echo $v; ?></option>
+              <?php endforeach; ?>
+              </select>
+            </div>
+          </div>
+          <div class="tl_tbox">
+            <div>
+              <?php echo $this->uploader; ?>
+              <p class="tl_help tl_tip"><?php echo $this->xplAvailable; ?></p>
+            </div>
+          </div>
+          <div class="tl_tbox">
+            <label for="ctrl_overwrite_data"><?php echo $this->overwriteLabel; ?><input type="checkbox" id="ctrl_overwrite_data" name="overwrite_data" value="1"></label>
+          </div>
+        </div>
+        <div class="tl_submit_container">
+          <input type="submit" class="tl_submit" value="<?php echo $this->import; ?>">
+        </div>
+    </div>
+  </form>
+</div>
