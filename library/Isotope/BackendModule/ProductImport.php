@@ -527,11 +527,22 @@ class ProductImport extends \BackendModule
 
         if(\Input::post('overwrite_data')=='1')
         {
-            //remove vendor pages
+            //Get Vendor Pages ONLY
+            $objVendorPages = \Database::getInstance()->executeUncached("SELECT id FROM tl_page WHERE vendor>0");
+
+            $arrVendorPageIds = $objVendorPages->fetchEach('id');
+
+            //Get Vendor Page Article IDs ONLY
+            $objVendorArticles = \Database::getInstance()->executeUncached("SELECT id FROM tl_article WHERE pid IN(".implode(",",$arrVendorPageIds).")");
+
+            $arrVendorArticleIds = $objVendorArticles->fetchEach('id');
+
+            //remove vendor pages ONLY
             \Database::getInstance()->executeUncached("DELETE FROM tl_page WHERE vendor>0");
-            //remove orphaned articles
-            \Database::getInstance()->executeUncached("DELETE FROM tl_article WHERE pid > (SELECT MAX( p.id ) FROM tl_page p )");
-            \Database::getInstance()->executeUncached("DELETE FROM tl_content WHERE pid > 29208 AND ptable='tl_article'");
+
+            //remove orphaned articles and content elements for vendor page articles ONLY
+            \Database::getInstance()->executeUncached("DELETE FROM tl_article WHERE id IN(".implode(",",$arrVendorArticleIds).") FROM tl_page p )");
+            \Database::getInstance()->executeUncached("DELETE FROM tl_content WHERE pid IN(".implode(",",$arrVendorArticleIds).") AND ptable='tl_article'");
 
         }
 
