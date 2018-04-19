@@ -528,7 +528,7 @@ class ProductImport extends \BackendModule
         if(\Input::post('overwrite_data')=='1')
         {
             //Get Vendor Pages ONLY
-            $objVendorPages = \Database::getInstance()->executeUncached("SELECT id FROM tl_page WHERE vendor>0");
+            /*$objVendorPages = \Database::getInstance()->executeUncached("SELECT id FROM tl_page WHERE vendor>0");
 
             $arrVendorPageIds = $objVendorPages->fetchEach('id');
 
@@ -536,13 +536,16 @@ class ProductImport extends \BackendModule
             $objVendorArticles = \Database::getInstance()->executeUncached("SELECT id FROM tl_article WHERE pid IN(".implode(",",$arrVendorPageIds).")");
 
             $arrVendorArticleIds = $objVendorArticles->fetchEach('id');
-
+*/
             //remove vendor pages ONLY
             \Database::getInstance()->executeUncached("DELETE FROM tl_page WHERE vendor>0");
 
             //remove orphaned articles and content elements for vendor page articles ONLY
-            \Database::getInstance()->executeUncached("DELETE FROM tl_article WHERE id IN(".implode(",",$arrVendorArticleIds).") FROM tl_page p )");
-            \Database::getInstance()->executeUncached("DELETE FROM tl_content WHERE pid IN(".implode(",",$arrVendorArticleIds).") AND ptable='tl_article'");
+            \Database::getInstance()->executeUncached("DELETE FROM tl_article WHERE pid NOT IN(SELECT id FROM tl_page)");
+            \Database::getInstance()->executeUncached("DELETE FROM tl_content WHERE ptable='tl_article' AND pid NOT IN(SELECT id FROM tl_article)");
+
+//            \Database::getInstance()->executeUncached("DELETE FROM tl_article WHERE id IN(".implode(",",$arrVendorArticleIds).")");
+  //          \Database::getInstance()->executeUncached("DELETE FROM tl_content WHERE pid IN(".implode(",",$arrVendorArticleIds).") AND ptable='tl_article'");
 
         }
 
