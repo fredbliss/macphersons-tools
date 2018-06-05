@@ -14,3 +14,4 @@
  * Backend Modules
  */
 $GLOBALS['TL_LANG']['MOD']['iso_import']                   = array('Data Import','');
+$GLOBALS['TL_LANG']['MOD']['iso_member_import']            = array('Member Data Import','');

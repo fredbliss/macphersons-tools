@@ -21,7 +21,13 @@ array_insert($GLOBALS['BE_MOD']['isotope'], 3, array
         'callback'          => 'Isotope\BackendModule\ProductImport',
         'tables'            => array(),
         'icon'              => 'system/modules/isotope/assets/images/application-monitor.png'
-    ),
+    )/*,
+    'iso_member_import' => array
+    (
+        'callback'          => 'Isotope\BackendModule\MemberImport',
+        'tables'            => array(),
+        'icon'              => 'system/modules/isotope/assets/images/application-monitor.png'
+    ),*/
 ));
 
 /**
